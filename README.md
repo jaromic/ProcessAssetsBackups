@@ -2,11 +2,11 @@
 
 This module provides an admin interface for the following assets/files backup functions:
 
-    Creating new backups in ZIP format
-    Uploading previously created backups
-    Restoring backups to site/assets/files
-    Providing info on existing backups
-    Managing existing backups (downloading, deleting, etc.)
+* Creating new backups in ZIP format
+* Uploading previously created backups
+* Restoring backups to site/assets/files
+* Providing info on existing backups
+* Managing existing backups (downloading, deleting, etc.)
 
 Requires ProcessWire 3.0.62 or newer.
 
