@@ -51,14 +51,18 @@ class ProcessAssetsBackups extends Process {
         );
     }
 
+    /**
+     * Returns the class name without namespace
+     *
+     * @return string
+     */
     protected function getClassShortName() {
         return (new ReflectionClass($this))->getShortName();
     }
 
     /**
-     * Get the path where backup files are stored
-     * 
-     * @param bool $short Specify true if you only want path relative to site root (for display purposes)
+     * Returns the fully-qualified path where backups are stored
+     *
      * @return string
      * 
      */
@@ -67,6 +71,12 @@ class ProcessAssetsBackups extends Process {
         return $backupPath;
     }
 
+    /**
+     * Returns the fully-qualified assets/files path
+     *
+     * @return string
+     *
+     */
     protected function getAssetsFilesPath() {
         return $this->wire('config')->paths->root . "site/assets/files";
     }
@@ -98,70 +108,6 @@ class ProcessAssetsBackups extends Process {
         }
 
         return $files;
-    }
-
-    protected static function getDirectoryEntries($path) {
-        $entries = [];
-        $dirHandle = opendir($path);
-        if ($dirHandle) {
-            while (false !== ($entry = readdir($dirHandle))) {
-                if ($entry != "." && $entry != "..") {
-                    array_push($entries, $entry);
-                }
-            }
-            closedir($dirHandle);
-        } else {
-            $this->error("Could not open directory '{$path}'.");
-        }
-        return $entries;
-    }
-
-    /**
-     *
-     * @param type $pattern
-     * @param type $subject
-     * @return true if $subject starts with $pattern, false otherwise
-     */
-    protected static function startsWith($pattern, $subject) {
-        $len = strlen($pattern);
-        return (substr($subject, 0, $len) === $pattern);
-    }
-
-    /**
-     *
-     * @param string $filePath
-     * @return boolean if all entries in the zipfile start with './'
-     */
-    protected static function isValidZipFile($filePath) {
-        $zip = new ZipArchive;
-        $result = true;
-        
-        if ($zip->open($filePath)) {
-            for ($i = 0; $i < $zip->numFiles; $i++) {
-                $filename = $zip->getNameIndex(0);
-                if (!self::startsWith("./", $filename)) {
-                    $result = false;
-                    break;
-                }
-            }
-        } else {
-            $result=false;
-        }
-        return $result;
-    }
-
-    protected static function getFileInfo($filePath, $id = 0) {
-        return [
-            'description' => '',
-            'valid' => self::isValidZipFile($filePath),
-            'time' => strftime("%c", filemtime($filePath)), // ISO-8601
-            'mtime' => filemtime($filePath), // timestamp
-            'user' => '',
-            'size' => filesize($filePath),
-            'basename' => basename($filePath),
-            'pathname' => $filePath,
-            'id' => $id,
-        ];
     }
 
     /**
@@ -223,6 +169,107 @@ class ProcessAssetsBackups extends Process {
         $basename = basename($file['pathname'], '.zip');
         $file['zip'] = $basename;
         return $file;
+    }
+
+    /**
+     * Process submitted restore form, restoring the given backup file to site/assets
+     *
+     * @param type $restoreFileName
+     * @return boolean
+     */
+    protected function processRestore($restoreFileName) {
+
+        $assetsFilesPath = $this->getAssetsFilesPath();
+        $randomDirectoryName = uniqid();
+        $restoreFilePath = $this->getBackupPath() . "/" . $restoreFileName;
+        $restoringAssetsFilesDirectoryTemporaryPath = $assetsFilesPath . "." . $randomDirectoryName . ".restoring";
+        $existingAssetsFilesDirectoryRenamedPath = $assetsFilesPath . "." . $randomDirectoryName . ".existing";
+
+        $this->message("Restoring '{$restoreFilePath}'...");
+
+        /* create the temporary directory for unzip in site/assets (so later moves are on same filesystem): */
+        mkdir($restoringAssetsFilesDirectoryTemporaryPath);
+
+        $zipInfo = wireUnzipFile($restoreFilePath, $restoringAssetsFilesDirectoryTemporaryPath);
+        if (!empty($zipInfo['errors'])) {
+            $this->error("Error unzipping '{$restoreFilePath}' to '{$restoringAssetsFilesDirectoryTemporaryPath}': " . implode(", ", $zipInfo['errors']));
+            return false;
+        }
+
+        /* first rename the existing files directory to '.<random>.existing': */
+        $this->message("Renaming '{$assetsFilesPath}' -> '{$existingAssetsFilesDirectoryRenamedPath}'...");
+        if (!rename($assetsFilesPath, $existingAssetsFilesDirectoryRenamedPath)) {
+            $this->error("Could not rename '{$assetsFilesPath}' to '{$existingAssetsFilesDirectoryRenamedPath}'.");
+            return false;
+        }
+        /* second rename the '.<random>.restoring' temporary directory to 'files': */
+        $this->message("Renaming '{$restoringAssetsFilesDirectoryTemporaryPath}' -> '{$assetsFilesPath}'...");
+        if (!rename($restoringAssetsFilesDirectoryTemporaryPath, $assetsFilesPath)) {
+            $this->error("Could not rename '{$restoringAssetsFilesDirectoryTemporaryPath}' to '{$assetsFilesPath}', undoing rename of assets/files directory...");
+            if (!rename($existingAssetsFilesDirectoryRenamedPath, $assetsFilesPath)) {
+                $this->error("Undo failed: Could not rename '{$existingAssetsFilesDirectoryRenamedPath}' to '{$assetsFilesPath}', leaving both directories for manual cleanup...");
+                return false;
+            }
+            unlink($temporaryDirectory);
+            return false;
+        }
+        $this->message("Restored '{$temporaryDirectory}' to '{$assetsFilesPath}'.");
+        return true;
+    }
+
+    /**
+     * Process submitted backup form, creating a new backup file
+     *
+     */
+    protected function processBackup() {
+        /** @var WireInput $post */
+        $input = $this->wire('input');
+
+        $filename = basename($this->wire('sanitizer')->filename($input->post('backup_name')), '.zip');
+        if (empty($filename)) {
+            $filename = date_format("c") . "-assets-files";
+        }
+        $_filename = $filename;
+        $filename .= '.zip';
+
+        if (preg_match('/^(.+)-(\d+)$/', $_filename, $matches)) {
+            $_filename = $matches[1];
+            $n = $matches[2];
+        } else {
+            $n = 0;
+        }
+
+        while (file_exists($this->getBackupPath() . $filename)) {
+            $filename = $_filename . "-" . ( ++$n) . ".zip";
+        }
+
+        $options = array(
+            'filename' => $filename,
+            'description' => $this->wire('sanitizer')->text($input->post('description')),
+        );
+
+        $backupPath = $this->getBackupPath();
+        if (!is_dir($backupPath)) {
+            mkdir($backupPath, 0777, true);
+        }
+
+        $assetsFilesDirectoryPath = $this->getAssetsFilesPath();
+        $backupFilePath = $backupPath . "/" . $filename;
+
+        $zipInfo = wireZipFile($backupFilePath, $assetsFilesDirectoryPath . "/.");
+        if (!empty($zipInfo['errors']) || !is_file($backupFilePath)) {
+            foreach ($zipInfo['errors'] as $error) {
+                $this->error($error);
+            }
+            $this->error(sprintf($this->_('Failed to create ZIP file: %s'), $backupFilePath));
+            if (is_file($backupFilePath)) {
+                unlink($backupFilePath);
+            }
+            $this->wire('session')->redirect('../');
+            return;
+        }
+
+        $this->message($this->_('Saved new backup:') . " $backupFilePath");
     }
 
     /**
@@ -463,101 +510,6 @@ class ProcessAssetsBackups extends Process {
         return $form->render();
     }
 
-    protected function processRestore($restoreFileName) {
-
-        $assetsFilesPath = $this->getAssetsFilesPath();
-        $randomDirectoryName = uniqid();
-        $restoreFilePath = $this->getBackupPath() . "/" . $restoreFileName;
-        $restoringAssetsFilesDirectoryTemporaryPath = $assetsFilesPath . "." . $randomDirectoryName . ".restoring";
-        $existingAssetsFilesDirectoryRenamedPath = $assetsFilesPath . "." . $randomDirectoryName . ".existing";
-
-        $this->message("Restoring '{$restoreFilePath}'...");
-
-        /* create the temporary directory for unzip in site/assets (so later moves are on same filesystem): */
-        mkdir($restoringAssetsFilesDirectoryTemporaryPath);
-
-        $zipInfo = wireUnzipFile($restoreFilePath, $restoringAssetsFilesDirectoryTemporaryPath);
-        if (!empty($zipInfo['errors'])) {
-            $this->error("Error unzipping '{$restoreFilePath}' to '{$restoringAssetsFilesDirectoryTemporaryPath}': " . implode(", ", $zipInfo['errors']));
-            return false;
-        }
-
-        /* first rename the existing files directory to '.<random>.existing': */
-        $this->message("Renaming '{$assetsFilesPath}' -> '{$existingAssetsFilesDirectoryRenamedPath}'...");
-        if (!rename($assetsFilesPath, $existingAssetsFilesDirectoryRenamedPath)) {
-            $this->error("Could not rename '{$assetsFilesPath}' to '{$existingAssetsFilesDirectoryRenamedPath}'.");
-            return false;
-        }
-        /* second rename the '.<random>.restoring' temporary directory to 'files': */
-        $this->message("Renaming '{$restoringAssetsFilesDirectoryTemporaryPath}' -> '{$assetsFilesPath}'...");
-        if (!rename($restoringAssetsFilesDirectoryTemporaryPath, $assetsFilesPath)) {
-            $this->error("Could not rename '{$restoringAssetsFilesDirectoryTemporaryPath}' to '{$assetsFilesPath}', undoing rename of assets/files directory...");
-            if (!rename($existingAssetsFilesDirectoryRenamedPath, $assetsFilesPath)) {
-                $this->error("Undo failed: Could not rename '{$existingAssetsFilesDirectoryRenamedPath}' to '{$assetsFilesPath}', leaving both directories for manual cleanup...");
-                return false;
-            }
-            unlink($temporaryDirectory);
-            return false;
-        }
-        $this->message("Restored '{$temporaryDirectory}' to '{$assetsFilesPath}'.");
-        return true;
-    }
-
-    /**
-     * Process submitted backup form, creating a new backup file
-     *
-     */
-    protected function processBackup() {
-        /** @var WireInput $post */
-        $input = $this->wire('input');
-
-        $filename = basename($this->wire('sanitizer')->filename($input->post('backup_name')), '.zip');
-        if (empty($filename)) {
-            $filename = date_format("c") . "-assets-files";
-        }
-        $_filename = $filename;
-        $filename .= '.zip';
-
-        if (preg_match('/^(.+)-(\d+)$/', $_filename, $matches)) {
-            $_filename = $matches[1];
-            $n = $matches[2];
-        } else {
-            $n = 0;
-        }
-
-        while (file_exists($this->getBackupPath() . $filename)) {
-            $filename = $_filename . "-" . ( ++$n) . ".zip";
-        }
-
-        $options = array(
-            'filename' => $filename,
-            'description' => $this->wire('sanitizer')->text($input->post('description')),
-        );
-
-        $backupPath = $this->getBackupPath();
-        if (!is_dir($backupPath)) {
-            mkdir($backupPath, 0777, true);
-        }
-
-        $assetsFilesDirectoryPath = $this->getAssetsFilesPath();
-        $backupFilePath = $backupPath . "/" . $filename;
-
-        $zipInfo = wireZipFile($backupFilePath, $assetsFilesDirectoryPath . "/.");
-        if (!empty($zipInfo['errors']) || !is_file($backupFilePath)) {
-            foreach ($zipInfo['errors'] as $error) {
-                $this->error($error);
-            }
-            $this->error(sprintf($this->_('Failed to create ZIP file: %s'), $backupFilePath));
-            if (is_file($backupFilePath)) {
-                unlink($backupFilePath);
-            }
-            $this->wire('session')->redirect('../');
-            return;
-        }
-
-        $this->message($this->_('Saved new backup:') . " $backupFilePath");
-    }
-
     /**
      * Execute download
      * 
@@ -569,15 +521,15 @@ class ProcessAssetsBackups extends Process {
         $filename = $file['basename'];
 
         header("Content-Description: File Transfer");
-        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
         header("Content-Transfer-Encoding: binary");
-        header("Content-Length: ".filesize($fileFullPath));
+        header("Content-Length: " . filesize($fileFullPath));
         header("Content-Type: application/octet-stream");
         header("Content-Disposition: attachment; filename=\"$filename\"");
 
         /* disable output buffering so large downloads will work despite little
          * php memory: */
-        while(ob_get_level()>0) {
+        while (ob_get_level() > 0) {
             ob_end_flush();
         }
 
@@ -685,31 +637,6 @@ class ProcessAssetsBackups extends Process {
     }
 
     /**
-     * Render a sortable column for a list table
-     *
-     * @param string|int $unformatted Unformatted sortable value
-     * @param string $formatted Formatted value
-     * @return string
-     *
-     */
-    protected function renderTdSort($unformatted, $formatted) {
-        return "<span style='display:none'>$unformatted</span>$formatted";
-    }
-
-    /**
-     * Render an <a> link with tooltip
-     * 
-     * @param string $href Link URL
-     * @param string $label Link text
-     * @param string $description Tooltip text
-     * @return string
-     * 
-     */
-    protected function renderATooltip($href, $label, $description) {
-        return "<a href='$href' class='tooltip' title='$description'>$label</a>";
-    }
-
-    /**
      * Install
      *
      * @throws WireException
@@ -725,12 +652,111 @@ class ProcessAssetsBackups extends Process {
 
     /**
      * Uninstall
-     * 
+     *
      */
     public function ___uninstall() {
         $path = $this->getBackupPath(true);
         $this->warning("Please note that the backup files in '{$path}' remain. If you don't want them there, please remove them manually.");
         parent::___uninstall();
+    }
+
+    /**
+     * Render a sortable column for a list table
+     *
+     * @param string|int $unformatted Unformatted sortable value
+     * @param string $formatted Formatted value
+     * @return string
+     *
+     */
+    protected function renderTdSort($unformatted, $formatted) {
+        return "<span style='display:none'>$unformatted</span>$formatted";
+    }
+
+    /**
+     * Render an <a> link with tooltip
+     *
+     * @param string $href Link URL
+     * @param string $label Link text
+     * @param string $description Tooltip text
+     * @return string
+     *
+     */
+    protected function renderATooltip($href, $label, $description) {
+        return "<a href='$href' class='tooltip' title='$description'>$label</a>";
+    }
+
+    /**
+     * @return array
+     *
+     */
+    protected static function getDirectoryEntries($path) {
+        $entries = [];
+        $dirHandle = opendir($path);
+        if ($dirHandle) {
+            while (false !== ($entry = readdir($dirHandle))) {
+                if ($entry != "." && $entry != "..") {
+                    array_push($entries, $entry);
+                }
+            }
+            closedir($dirHandle);
+        } else {
+            $this->error("Could not open directory '{$path}'.");
+        }
+        return $entries;
+    }
+
+    /**
+     *
+     * @param type $pattern
+     * @param type $subject
+     * @return true if $subject starts with $pattern, false otherwise
+     */
+    protected static function startsWith($pattern, $subject) {
+        $len = strlen($pattern);
+        return (substr($subject, 0, $len) === $pattern);
+    }
+
+    /**
+     *
+     * @param string $filePath
+     * @return boolean if all entries in the zipfile start with './'
+     */
+    protected static function isValidZipFile($filePath) {
+        $zip = new ZipArchive;
+        $result = true;
+
+        if ($zip->open($filePath)) {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $filename = $zip->getNameIndex(0);
+                if (!self::startsWith("./", $filename)) {
+                    $result = false;
+                    break;
+                }
+            }
+        } else {
+            $result = false;
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @param string $filePath
+     * @param int $id
+     * @return array
+     */
+    protected static function getFileInfo($filePath, $id = 0) {
+        return [
+            'description' => '',
+            'valid' => self::isValidZipFile($filePath),
+            'time' => strftime("%c", filemtime($filePath)), // ISO-8601
+            'mtime' => filemtime($filePath), // timestamp
+            'user' => '',
+            'size' => filesize($filePath),
+            'basename' => basename($filePath),
+            'pathname' => $filePath,
+            'id' => $id,
+        ];
     }
 
 }
