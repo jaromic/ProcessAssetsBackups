@@ -16,7 +16,7 @@ use ZipArchive;
  * https://processwire.com
  *
  */
-class ProcessAssetsFilesBackups extends Process {
+class ProcessAssetsBackups extends Process {
 
     /**
      * Minimum required version for this module
@@ -305,7 +305,7 @@ class ProcessAssetsFilesBackups extends Process {
         /** @var InputfieldForm $form */
         $form = $this->wire('modules')->get('InputfieldForm');
         $form->attr('id', 'upload_form');
-        $form->description = $this->_('Add new assets files ZIP archive');
+        $form->description = $this->_('Add new assets ZIP archive');
 
         /** @var InputfieldFile $f */
         $f = $this->modules->get("InputfieldFile");

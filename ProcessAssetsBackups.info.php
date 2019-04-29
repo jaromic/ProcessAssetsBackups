@@ -1,20 +1,20 @@
 <?php namespace ProcessWire;
 
 $info = array(
-	"title" => __('Assets/Files Backups', __FILE__),
-	"summary" => __('Create and/or restore assets/files backups from ProcessWire admin.', __FILE__), 
+	"title" => __('Assets Backups', __FILE__),
+	"summary" => __('Create and/or restore assets backups from ProcessWire admin.', __FILE__), 
 	"version" => 0, 
 	"author" => "Michael Jaros", 
 	"icon" => "database", 
 	"requires" => "ProcessWire>=3.0.62", 
 	"permission" => "fs-backup",
 	"permissions" => array(
-		"db-backup" => "Manage assets/files backups (recommended for superuser only)" 
+		"fs-backup" => "Manage assets/files backups (recommended for superuser only)" 
 	),
 	"page" => array(
-		"name" => "assets-files-backups",
+		"name" => "assets-backups",
 		"parent" => "setup", 
-		"title" => "Assets/Files Backups"
+		"title" => "Assets Backups"
 	),
 	"nav" => array(
 		array( 
