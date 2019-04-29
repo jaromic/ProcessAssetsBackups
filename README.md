@@ -15,6 +15,7 @@ Requires ProcessWire 3.0.62 or newer.
 * Created ZIP-files cannot be opened with some tools (like Windows explorer) due to `./` path prefix
 * PHP and web server must be configured to allow large file uploads for 'restore' functionality
 * Backup descriptions not implemented yet
+* Until this module can do anything fancier than plain file uploads, web server and PHP must be configured for apropriate upload filesize limits.
 
 ## License and Copyright
 
