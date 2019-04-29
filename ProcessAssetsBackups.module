@@ -210,7 +210,7 @@ class ProcessAssetsBackups extends Process {
                 $this->error("Undo failed: Could not rename '{$existingAssetsFilesDirectoryRenamedPath}' to '{$assetsFilesPath}', leaving both directories for manual cleanup...");
                 return false;
             }
-            unlink($temporaryDirectory);
+            unlink($restoringAssetsFilesDirectoryTemporaryPath);
             return false;
         }
         $this->message("Restored '{$temporaryDirectory}' to '{$assetsFilesPath}'.");
