@@ -12,6 +12,7 @@ Requires ProcessWire 3.0.62 or newer.
 
 ## Known Issues:
 
+* Restore does not work reliably with large files on windows (permission denied error)
 * Created ZIP-files cannot be opened with some tools (like Windows explorer) due to `./` path prefix
 * PHP and web server must be configured to allow large file uploads for 'restore' functionality
 * Backup descriptions not implemented yet
