@@ -248,6 +248,11 @@ class ProcessAssetsBackups extends Process {
             $this->_x('actions', 'th'),
         ));
 
+        $backupPath = $this->getBackupPath();
+        if (!is_dir($backupPath)) {
+            mkdir($backupPath, 0777, true);
+        }
+
         foreach ($this->getBackupFiles() as $id => $file) {
             $numFiles++;
             $basename = $file['basename'];
@@ -560,12 +565,25 @@ class ProcessAssetsBackups extends Process {
     public function ___executeDownload() {
 
         $file = $this->getFile();
-        $filename = $file['pathname'];
+        $fileFullPath = $file['pathname'];
+        $filename = $file['basename'];
 
-        wireSendFile($filename, array(
-            'forceDownload' => true,
-            'exit' => false
-        ));
+        header("Content-Description: File Transfer");
+        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header("Content-Transfer-Encoding: binary");
+        header("Content-Length: ".filesize($fileFullPath));
+        header("Content-Type: application/octet-stream");
+        header("Content-Disposition: attachment; filename=\"$filename\"");
+
+        /* disable output buffering so large downloads will work despite little
+         * php memory: */
+        while(ob_get_level()>0) {
+            ob_end_flush();
+        }
+
+        $fp = fopen($fileFullPath, 'rb');
+        fpassthru($fp);
+        fclose($fp);
 
         exit;
     }

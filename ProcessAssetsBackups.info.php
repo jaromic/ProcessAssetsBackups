@@ -3,7 +3,7 @@
 $info = array(
 	"title" => __('Assets Backups', __FILE__),
 	"summary" => __('Create and/or restore assets backups from ProcessWire admin.', __FILE__), 
-	"version" => 0, 
+	"version" => "0.9.1",
 	"author" => "Michael Jaros", 
 	"icon" => "database", 
 	"requires" => "ProcessWire>=3.0.62", 
