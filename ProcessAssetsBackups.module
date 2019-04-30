@@ -214,7 +214,14 @@ class ProcessAssetsBackups extends Process {
             unlink($restoringAssetsFilesDirectoryTemporaryPath);
             return false;
         }
-        $this->message("Restored '{$temporaryDirectory}' to '{$assetsFilesPath}'.");
+        $this->message("Restored '{$restoreFilePath}' to '{$assetsFilesPath}'.");
+
+        /* remove old sites/assets from'.<random>.existing': */
+        $this->message("Cleaning up '{$existingAssetsFilesDirectoryRenamedPath}'...");
+        if (!self::delTree($existingAssetsFilesDirectoryRenamedPath)) {
+            $this->error("Could not recursively remove '$existingAssetsFilesDirectoryRenamedPath', directory contents may have been partly deleted.");
+        }
+
         return true;
     }
 
@@ -758,6 +765,29 @@ class ProcessAssetsBackups extends Process {
             'pathname' => $filePath,
             'id' => $id,
         ];
+    }
+
+    /**
+     * recursively delete a directory with all its subdirectories:
+     *
+     * @param string $dir path to any directory except '/'
+     * @return boolean true on success, false on failure
+     */
+    protected static function delTree($dir) {
+        if (empty($dir) || !is_dir($dir) || $dir == "/") {
+            return false;
+        }
+        $files = scandir($dir);
+        foreach ($files as $file) {
+            if ($file == "." || $file == "..") {
+                continue;
+            } elseif (is_dir("$dir/$file")) {
+                self::delTree("$dir/$file");
+            } else {
+                unlink("$dir/$file");
+            }
+        }
+        return rmdir($dir);
     }
 
 }
