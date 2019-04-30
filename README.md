@@ -12,10 +12,12 @@ Requires ProcessWire 3.0.62 or newer.
 
 ## Known Issues:
 
-* Restore does not work reliably with large files on windows (permission denied error)
-* Created ZIP-files cannot be opened with some tools (like Windows explorer) due to `./` path prefix
-* PHP and web server must be configured to allow large file uploads for 'restore' functionality
-* Backup descriptions not implemented yet
+* Restore does not work reliably with large files on Windows when Avira
+  Antivirus real-time protection is activated. Consider adding an exception for
+  sites/assets in your dev environment or deactivate real-time protection while
+  restoring.
+* Created ZIP-files cannot be opened with Windows explorer due to `./` path prefix
+* Backup descriptions are not implemented yet
 * Until this module can do anything fancier than plain file uploads, web server and PHP must be configured for apropriate upload filesize limits.
 
 ## License and Copyright
