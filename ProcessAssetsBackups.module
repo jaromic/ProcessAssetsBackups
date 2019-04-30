@@ -185,16 +185,8 @@ class ProcessAssetsBackups extends Process {
         $restoringAssetsFilesDirectoryTemporaryPath = $assetsFilesPath . "." . $randomDirectoryName . ".restoring";
         $existingAssetsFilesDirectoryRenamedPath = $assetsFilesPath . "." . $randomDirectoryName . ".existing";
 
-        $this->message("Restoring '{$restoreFilePath}'...");
-
         /* create the temporary directory for unzip in site/assets (so later moves are on same filesystem): */
         mkdir($restoringAssetsFilesDirectoryTemporaryPath);
-
-        $zipInfo = wireUnzipFile($restoreFilePath, $restoringAssetsFilesDirectoryTemporaryPath);
-        if (!empty($zipInfo['errors'])) {
-            $this->error("Error unzipping '{$restoreFilePath}' to '{$restoringAssetsFilesDirectoryTemporaryPath}': " . implode(", ", $zipInfo['errors']));
-            return false;
-        }
 
         /* first rename the existing files directory to '.<random>.existing': */
         $this->message("Renaming '{$assetsFilesPath}' -> '{$existingAssetsFilesDirectoryRenamedPath}'...");
@@ -202,6 +194,15 @@ class ProcessAssetsBackups extends Process {
             $this->error("Could not rename '{$assetsFilesPath}' to '{$existingAssetsFilesDirectoryRenamedPath}'.");
             return false;
         }
+
+        /* unzip the zip file to '.<random>.restoring': */
+        $this->message("Restoring '{$restoreFilePath}'...");
+        $zipInfo = wireUnzipFile($restoreFilePath, $restoringAssetsFilesDirectoryTemporaryPath);
+        if (!empty($zipInfo['errors'])) {
+            $this->error("Error unzipping '{$restoreFilePath}' to '{$restoringAssetsFilesDirectoryTemporaryPath}': " . implode(", ", $zipInfo['errors']));
+            return false;
+        }
+
         /* second rename the '.<random>.restoring' temporary directory to 'files': */
         $this->message("Renaming '{$restoringAssetsFilesDirectoryTemporaryPath}' -> '{$assetsFilesPath}'...");
         if (!rename($restoringAssetsFilesDirectoryTemporaryPath, $assetsFilesPath)) {
